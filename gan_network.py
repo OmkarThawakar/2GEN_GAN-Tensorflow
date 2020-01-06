@@ -16,6 +16,7 @@ except Exception:
 import tensorflow as tf
 
 import os
+os.environ['CUDA_VISIBLE_DEVICES']=''
 os.system('color 1')
 import time
 import sys
@@ -32,7 +33,7 @@ vgg = tf.keras.applications.VGG19(include_top=True, weights='imagenet')
 vgg_model = tf.keras.Model(inputs=[vgg.input], outputs=[vgg.layers[-2].output]) 
 
 
-experiment = '123456789/'
+experiment = 'Experiment/'
 PATH = 'dataset/'
 LAMBDA = 100
 epochs = 100
@@ -487,7 +488,7 @@ checkpoint1 = tf.train.Checkpoint(generator1_optimizer=generator1_optimizer,
                                  discriminator1=discriminator1,
                                  )
 
-checkpoint_dir2 = experiment + './training_checkpoints' + 'gen2'
+checkpoint_dir2 = experiment + './training_checkpoints/' + 'gen2'
 checkpoint_prefix2 = os.path.join(checkpoint_dir2, "ckpt")
 checkpoint2 = tf.train.Checkpoint(generator2_optimizer=generator2_optimizer,
                                  discriminator2_optimizer=discriminator2_optimizer,
@@ -521,13 +522,13 @@ def generate_images(model1, model2, test_input, tar, number, folder = experiment
         elif mode == 'test' :
             gen1_prediction = model1(test_input, training=True)
             gen2_prediction = model2(gen1_prediction, training=True)
-            display_list = [test_input[0], prediction[0], tar[0]]
+            display_list = [test_input[0], gen1_prediction[0], gen2_prediction[0], tar[0]]
             image = np.hstack([img for img in display_list])
             try :
                 os.mkdir(folder+'{}'.format(mode))
             except:
                 pass
-            plt.imsave(folder+'{}/{}_.png'.format(mode,umber), np.array((image * 0.5 + 0.5)*255, dtype='uint8'))
+            plt.imsave(folder+'{}/{}_.png'.format(mode,number), np.array((image * 0.5 + 0.5)*255, dtype='uint8'))
         else:
             print('Enter valid mode eighter [!]train or [!]test')
             exit(0)
@@ -644,7 +645,7 @@ def fit(train_ds, epochs, test_ds):
 
 # ## Training GAN Network
 
-fit(train_dataset, epochs, test_dataset)
+#fit(train_dataset, epochs, test_dataset)
 
 # ## Restore the latest checkpoint and test
 
@@ -662,12 +663,13 @@ try:
 except:
     pass
 num=1
-for inp, tar in test_dataset.take(16):
-    generate_images(generator1, generator2, inp, tar,num, folder=experiment+'Test_Data/',mode='test')
+for inp, tar in test_dataset.take(15):
+    generate_images(generator1, generator2, inp, tar,num, folder=experiment, mode='test')
     num+=1
 
 
 # ## Save Generator Model
 
-generator.save(experiment + 'generator_model')
+generator1.save(experiment + 'generator1_model')
+generator2.save(experiment + 'generator2_model')
 
