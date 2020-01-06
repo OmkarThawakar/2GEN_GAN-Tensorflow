@@ -21,3 +21,6 @@ PATH = os.path.join(os.path.dirname(path_to_zip), 'facades/')
 ### Dataset Structure
 
 Images in training set is of format input|target as shows below.
+
+![alt text](dataset/train/1.jpg)
+![alt text](dataset/train/2.jpg)
