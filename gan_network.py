@@ -20,6 +20,7 @@ os.environ['CUDA_VISIBLE_DEVICES']=''
 os.system('color 1')
 import time
 import sys
+from absl import app
 
 from matplotlib import pyplot as plt
 from IPython import display
@@ -28,10 +29,6 @@ from tensorflow.keras.layers import Input, Dense, Reshape, Flatten, Dropout, Con
 import datetime
 import numpy as np
 from termcolor import colored, cprint
-
-vgg = tf.keras.applications.VGG19(include_top=True, weights='imagenet')
-vgg_model = tf.keras.Model(inputs=[vgg.input], outputs=[vgg.layers[-2].output]) 
-
 
 experiment = 'Experiment/'
 PATH = 'dataset/'
@@ -116,42 +113,7 @@ def load_image_test(image_file):
 
     return input_image, real_image
 
-# ## Input Pipeline
-
-train_dataset = tf.data.Dataset.list_files(PATH+'train/*.jpg')
-train_dataset = train_dataset.map(load_image_train,
-                                  num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-train_dataset = train_dataset.shuffle(BUFFER_SIZE)
-train_dataset = train_dataset.batch(BATCH_SIZE)
-
-test_dataset = tf.data.Dataset.list_files(PATH+'test/*.jpg')
-test_dataset = test_dataset.map(load_image_test)
-test_dataset = test_dataset.batch(BATCH_SIZE)
-
-
 OUTPUT_CHANNELS = 3
-
-def Conv_Block(filters, size, stride=1, name=''):
-    initializer = tf.random_normal_initializer(0., 0.02)
-    result = tf.keras.Sequential()
-    result.add(
-      tf.keras.layers.Conv2D(filters, size, strides=stride, padding='same',
-                             kernel_initializer=initializer, use_bias=False,
-                            name='Conv_'+name))
-    return result
-
-
-def DeConv_Block(filters, size, stride=2, name=''):
-    initializer = tf.random_normal_initializer(0., 0.02)
-    result = tf.keras.Sequential()
-    result.add(
-    tf.keras.layers.Conv2DTranspose(filters, size, strides=stride,
-                                    padding='same',
-                                    kernel_initializer=initializer,
-                                    use_bias=False,
-                                    name='DeConv_'+name))
-    return result
 
 def batch_norm(tensor):
     return tf.keras.layers.BatchNormalization(axis=3,epsilon=1e-5, momentum=0.1, gamma_initializer=tf.random_normal_initializer(1.0, 0.02))(tensor)
@@ -233,14 +195,6 @@ class Generator_1:
 	    
 	    return tf.keras.Model(inputs=self.inputs, outputs=tensor)
 
-gen1 = Generator_1()
-generator1 = gen1.generator
-print('='*50)
-text = colored('Total Trainable parameters of Generator 1 are :: {}'.format(generator1.count_params()), 'red', attrs=['reverse','blink'])
-print(text)
-print('='*50)
-
-
 class Discriminator1():
 
 	def __init__(self):
@@ -305,13 +259,6 @@ class Discriminator1():
 		                            kernel_initializer=initializer)(zero_pad2) 
 
 		return tf.keras.Model(inputs=[self.inp, self.tar], outputs=last) 
-
-disc1 = Discriminator1()
-discriminator1 = disc1.discriminator
-print('='*50)
-text = colored('Total Trainable parameters of Discriminator 1 are :: {}'.format(discriminator1.count_params()), 'blue', attrs=['reverse','blink'])
-print(text)
-print('='*50)
 
 ###############################################################################################################
 
@@ -392,14 +339,6 @@ class Generator_2:
 	    
 	    return tf.keras.Model(inputs=self.inputs, outputs=tensor)
 
-gen2 = Generator_2()
-generator2 = gen2.generator
-print('='*50)
-text = colored('Total Trainable parameters of Generator 1 are :: {}'.format(generator2.count_params()), 'red', attrs=['reverse','blink'])
-print(text)
-print('='*50)
-
-
 class Discriminator2():
 
 	def __init__(self):
@@ -465,211 +404,215 @@ class Discriminator2():
 
 		return tf.keras.Model(inputs=[self.inp, self.tar], outputs=last) 
 
-disc2 = Discriminator2()
-discriminator2 = disc2.discriminator
-print('='*50)
-text = colored('Total Trainable parameters of Discriminator 1 are :: {}'.format(discriminator2.count_params()), 'blue', attrs=['reverse','blink'])
-print(text)
-print('='*50)
+class GAN(object):
+	"""GAN class.
+	Args:
+	epochs: Number of epochs.
+	enable_function: If true, train step is decorated with tf.function.
+	buffer_size: Shuffle buffer size..
+	batch_size: Batch size.
+	"""
+	def __init__(self, epochs,path,mode):
+		self.epochs = epochs
+		self.path = 'dataset'
+		self.lambda_value = 100
+		self.gen1 = Generator_1()
+		self.generator1 = self.gen1.generator
+		self.print_info(self.generator1, 'Generator 1')
 
-#######################################################################################
+		self.disc1 = Discriminator1()
+		self.discriminator1 = self.disc1.discriminator
+		self.print_info(self.discriminator1, 'discriminator 1')
 
-generator1_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-discriminator1_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+		self.disc2 = Discriminator2()
+		self.discriminator2 = self.disc2.discriminator
+		self.print_info(self.discriminator2, 'discriminator 2')
 
-generator2_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-discriminator2_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+		self.gen2 = Generator_2()
+		self.generator2 = self.gen2.generator
+		self.print_info(self.generator2, 'Generator 2')
 
-checkpoint_dir1 = experiment + './training_checkpoints/' + 'gen1'
-checkpoint_prefix1 = os.path.join(checkpoint_dir1, "ckpt")
-checkpoint1 = tf.train.Checkpoint(generator1_optimizer=generator1_optimizer,
-                                 discriminator1_optimizer=discriminator1_optimizer,
-                                 generator1=generator1,
-                                 discriminator1=discriminator1,
-                                 )
+		self.generator1_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+		self.discriminator1_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
 
-checkpoint_dir2 = experiment + './training_checkpoints/' + 'gen2'
-checkpoint_prefix2 = os.path.join(checkpoint_dir2, "ckpt")
-checkpoint2 = tf.train.Checkpoint(generator2_optimizer=generator2_optimizer,
-                                 discriminator2_optimizer=discriminator2_optimizer,
-                                 generator2=generator2,
-                                 discriminator2=discriminator2)
+		self.generator2_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+		self.discriminator2_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
 
-########### Restore latest checkpoint
-if restore_checkpoint :
-    checkpoint1.restore(tf.train.latest_checkpoint(restore_checkpoint)) 
-    checkpoint2.restore(tf.train.latest_checkpoint(restore_checkpoint)) 
-    text = colored('Checkpoint restored !!!','magenta')
-    print(text)
-    print(colored('='*50,'magenta'))
-else:
-    print(colored('New Training!!','yellow'))
-    pass
+		self.checkpoint_dir1 = self.path + './training_checkpoints/' + 'gen1'
+		self.checkpoint_prefix1 = os.path.join(self.checkpoint_dir1, "ckpt")
+		self.checkpoint1 = tf.train.Checkpoint(generator1_optimizer=self.generator1_optimizer,
+		                                 discriminator1_optimizer=self.discriminator1_optimizer,
+		                                 generator1=self.generator1,
+		                                 discriminator1=self.discriminator1,
+		                                 )
 
-### Generate Images
-def generate_images(model1, model2, test_input, tar, number, folder = experiment, mode='train'):
-    with tf.device('/device:cpu:0'):
-        if mode == 'train' :
-            gen1_prediction = model1(test_input, training=True)
-            gen2_prediction = model2(gen1_prediction, training=True)
-            display_list = [test_input[0], gen1_prediction[0], gen2_prediction[0], tar[0]]
-            image = np.hstack([img for img in display_list])
-            try :
-                os.mkdir(folder+'{}'.format(mode))
-            except:
-                pass
-            plt.imsave(folder+'{}/{}_.png'.format(mode,number), np.array((image * 0.5 + 0.5)*255, dtype='uint8'))
-        elif mode == 'test' :
-            gen1_prediction = model1(test_input, training=True)
-            gen2_prediction = model2(gen1_prediction, training=True)
-            display_list = [test_input[0], gen1_prediction[0], gen2_prediction[0], tar[0]]
-            image = np.hstack([img for img in display_list])
-            try :
-                os.mkdir(folder+'{}'.format(mode))
-            except:
-                pass
-            plt.imsave(folder+'{}/{}_.png'.format(mode,number), np.array((image * 0.5 + 0.5)*255, dtype='uint8'))
-        else:
-            print('Enter valid mode eighter [!]train or [!]test')
-            exit(0)
+		self.checkpoint_dir2 = self.path + './training_checkpoints' + 'gen2'
+		self.checkpoint_prefix2 = os.path.join(self.checkpoint_dir2, "ckpt")
+		self.checkpoint2 = tf.train.Checkpoint(generator2_optimizer=self.generator2_optimizer,
+		                                 discriminator2_optimizer=self.discriminator2_optimizer,
+		                                 generator2=self.generator2,
+		                                 discriminator2=self.discriminator2)
 
-log_dir = experiment + "logs/"
+		log_dir = self.path + "logs/"
+		self.summary_writer = tf.summary.create_file_writer(log_dir + "fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
 
-summary_writer = tf.summary.create_file_writer(
-  log_dir + "fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+	def generate_images(self, test_input, tar, number, folder = experiment, mode='train'):
+		if mode == 'train':
+		    gen1_prediction = self.generator1(test_input, training=True)
+		    gen2_prediction = self.generator2(gen1_prediction, training=True)
+		    display_list = [test_input[0], gen1_prediction[0], gen2_prediction[0], tar[0]]
+		    image = np.hstack([img for img in display_list])
+		    try :
+		        os.mkdir(folder+'{}'.format(mode))
+		    except:
+		        pass
+		    plt.imsave(folder+'{}/{}_.png'.format(mode,number), np.array((image * 0.5 + 0.5)*255, dtype='uint8'))
+		elif mode == 'test' :
+		    gen1_prediction = self.generator1(test_input, training=True)
+		    gen2_prediction = self.generator2(gen1_prediction, training=True)
+		    display_list = [test_input[0], gen1_prediction[0], gen2_prediction[0], tar[0]]
+		    image = np.hstack([img for img in display_list])
+		    try :
+		        os.mkdir(folder+'{}'.format(mode))
+		    except:
+		        pass
+		    plt.imsave(folder+'{}/{}_.png'.format(mode,umber), np.array((image * 0.5 + 0.5)*255, dtype='uint8'))
+		else:
+		    print('Enter valid mode eighter [!]train or [!]test')
+		    exit(0)
 
-@tf.function
-def train_step(input_image, target, epoch):
-    with tf.GradientTape() as gen_tape1, tf.GradientTape() as disc_tape1, tf.GradientTape() as gen_tape2, tf.GradientTape() as disc_tape2 :
-        gen1_output = generator1(input_image, training=True)
+	def print_info(self,object, name):
+		print('='*50)
+		text = colored('Total Trainable parameters of {} are :: {}'.format(object.count_params(), name), 'red', attrs=['reverse','blink'])
+		print(text)
+		print('='*50)
 
-        disc1_real_output = discriminator1([input_image, target], training=True)
-        disc1_generated_output = discriminator1([input_image, gen1_output], training=True)
+	def train_step(self,input_image, target, epoch):
+	    with tf.GradientTape() as gen_tape1, tf.GradientTape() as disc_tape1, tf.GradientTape() as gen_tape2, tf.GradientTape() as disc_tape2 :
+	        gen1_output = self.generator1(input_image, training=True)
+	        disc1_real_output = self.discriminator1([input_image, target], training=True)
+	        disc1_generated_output = self.discriminator1([input_image, gen1_output], training=True)
+	        gen1_total_loss, gen1_gan_loss, gen1_l1_loss = self.gen1.generator_loss(disc1_generated_output, gen1_output, target)
+	        disc1_loss = self.disc1.discriminator_loss(disc1_real_output, disc1_generated_output)
 
-        gen1_total_loss, gen1_gan_loss, gen1_l1_loss = gen1.generator_loss(disc1_generated_output, gen1_output, target)
-        disc1_loss = disc1.discriminator_loss(disc1_real_output, disc1_generated_output)
+	        gen2_output = self.generator2(gen1_output, training=True)
+	        disc2_real_output = self.discriminator2([input_image, target], training=True)
+	        disc2_generated_output = self.discriminator2([input_image, gen2_output], training=True)
+	        gen2_total_loss, gen2_gan_loss, gen2_l1_loss = self.gen2.generator_loss(disc2_generated_output, gen2_output, target)
+	        disc2_loss = self.disc2.discriminator_loss(disc2_real_output, disc2_generated_output)
 
-        gen2_output = generator2(gen1_output, training=True)
+	    ######################### Generator 1 Gradients ############################
+	    generator1_gradients = gen_tape1.gradient(gen1_total_loss,
+	                                          self.generator1.trainable_variables)
+	    discriminator1_gradients = disc_tape1.gradient(disc1_loss,
+	                                               self.discriminator1.trainable_variables)
+	    self.generator1_optimizer.apply_gradients(zip(generator1_gradients,
+	                                          self.generator1.trainable_variables))
+	    self.discriminator1_optimizer.apply_gradients(zip(discriminator1_gradients,
+	                                              self.discriminator1.trainable_variables))
+	    ######################### Generator 2 Gradients ############################
+	    generator2_gradients = gen_tape2.gradient(gen2_total_loss,
+	                                          self.generator2.trainable_variables)
+	    discriminator2_gradients = disc_tape2.gradient(disc2_loss,
+	                                               self.discriminator2.trainable_variables)
+	    self.generator2_optimizer.apply_gradients(zip(generator2_gradients,
+	                                          self.generator2.trainable_variables))
+	    self.discriminator2_optimizer.apply_gradients(zip(discriminator2_gradients,
+	                                              self.discriminator2.trainable_variables))
 
-        disc2_real_output = discriminator2([input_image, target], training=True)
-        disc2_generated_output = discriminator2([input_image, gen2_output], training=True)
+	    with self.summary_writer.as_default():
+	        tf.summary.scalar('gen1_total_loss', gen1_total_loss, step=epoch)
+	        tf.summary.scalar('gen1_gan_loss', gen1_gan_loss, step=epoch)
+	        tf.summary.scalar('gen1_l1_loss', gen1_l1_loss, step=epoch)
+	        tf.summary.scalar('disc1_loss', disc1_loss, step=epoch)
+	        tf.summary.scalar('gen2_total_loss', gen2_total_loss, step=epoch)
+	        tf.summary.scalar('gen2_gan_loss', gen2_gan_loss, step=epoch)
+	        tf.summary.scalar('gen2_l1_loss', gen2_l1_loss, step=epoch)
+	        tf.summary.scalar('disc2_loss', disc2_loss, step=epoch)
 
-        gen2_total_loss, gen2_gan_loss, gen2_l1_loss = gen2.generator_loss(disc2_generated_output, gen2_output, target)
-        disc2_loss = disc2.discriminator_loss(disc2_real_output, disc2_generated_output)
+	    outputs = {
+	                'gen1_total_loss' : gen1_total_loss , 
+	                'gen1_gan_loss' : gen1_gan_loss, 
+	                'gen1_l1_loss' : gen1_l1_loss,
+	                'disc1_loss' : disc1_loss,
+	                'gen2_total_loss' : gen2_total_loss , 
+	                'gen2_gan_loss' : gen2_gan_loss, 
+	                'gen2_l1_loss' : gen2_l1_loss,
+	                'disc2_loss' : disc2_loss, 
+	            }
 
-    ######################### Generator 1 Gradients ############################
+	    return outputs
 
-    generator1_gradients = gen_tape1.gradient(gen1_total_loss,
-                                          generator1.trainable_variables)
-    discriminator1_gradients = disc_tape1.gradient(disc1_loss,
-                                               discriminator1.trainable_variables)
+	def fit(self, train_ds, epochs, test_ds):
+	    for epoch in range(self.epochs):
+	        start = time.time()
+	        display.clear_output(wait=True)
+	        for example_input, example_target in test_ds.take(1):
+	            self.generate_images(example_input, example_target, epoch)
+	        print(colored("Epoch: {}".format(epoch),'green',attrs=['reverse','blink']))
 
-    generator1_optimizer.apply_gradients(zip(generator1_gradients,
-                                          generator1.trainable_variables))
-    discriminator1_optimizer.apply_gradients(zip(discriminator1_gradients,
-                                              discriminator1.trainable_variables))
+	        # Train
+	        for n, (input_image, target) in train_ds.enumerate():
+	            print('.', end='')
+	            if (n+1) % 100 == 0:
+	                print()
+	            outputs = self.train_step(input_image, target, epoch)
+	        print()
+	        print('='*50)
+	        print(colored('[!] gen1_total_loss :: {}'.format(outputs['gen1_total_loss']),'green'))
+	        print(colored('[!] gen1_gan_loss :: {}'.format(outputs['gen1_gan_loss']),'green'))
+	        print(colored('[!] gen1_l1_loss :: {}'.format(outputs['gen1_l1_loss']),'green'))
+	        print(colored('[!] disc1_loss :: {}'.format(outputs['disc1_loss']),'green'))
 
-    ######################### Generator 2 Gradients ############################
-    generator2_gradients = gen_tape2.gradient(gen2_total_loss,
-                                          generator2.trainable_variables)
+	        print(colored('[!] gen2_total_loss :: {}'.format(outputs['gen2_total_loss']),'yellow'))
+	        print(colored('[!] gen2_gan_loss :: {}'.format(outputs['gen2_gan_loss']),'yellow'))
+	        print(colored('[!] gen2_l1_loss :: {}'.format(outputs['gen2_l1_loss']),'yellow'))
+	        print(colored('[!] disc2_loss :: {}'.format(outputs['disc2_loss']),'yellow'))
+	        print('='*50)
 
-    discriminator2_gradients = disc_tape2.gradient(disc2_loss,
-                                               discriminator2.trainable_variables)
+	        # saving (checkpoint) the model every 20 epochs
+	        if (epoch + 1) % 5 == 0:
+	            checkpoint1.save(file_prefix = checkpoint_prefix1)
+	            checkpoint2.save(file_prefix = checkpoint_prefix2)
 
-    generator2_optimizer.apply_gradients(zip(generator2_gradients,
-                                          generator2.trainable_variables))
-    discriminator2_optimizer.apply_gradients(zip(discriminator2_gradients,
-                                              discriminator2.trainable_variables))
+	        print ('Time taken for epoch {} is {} sec\n'.format(epoch + 1,
+	                                                time.time()-start))
+	    checkpoint1.save(file_prefix = checkpoint_prefix1)
+	    checkpoint2.save(file_prefix = checkpoint_prefix2)
 
-    with summary_writer.as_default():
-        tf.summary.scalar('gen1_total_loss', gen1_total_loss, step=epoch)
-        tf.summary.scalar('gen1_gan_loss', gen1_gan_loss, step=epoch)
-        tf.summary.scalar('gen1_l1_loss', gen1_l1_loss, step=epoch)
-        tf.summary.scalar('disc1_loss', disc1_loss, step=epoch)
-        tf.summary.scalar('gen2_total_loss', gen2_total_loss, step=epoch)
-        tf.summary.scalar('gen2_gan_loss', gen2_gan_loss, step=epoch)
-        tf.summary.scalar('gen2_l1_loss', gen2_l1_loss, step=epoch)
-        tf.summary.scalar('disc2_loss', disc2_loss, step=epoch)
 
-    outputs = {
-                'gen1_total_loss' : gen1_total_loss , 
-                'gen1_gan_loss' : gen1_gan_loss, 
-                'gen1_l1_loss' : gen1_l1_loss,
-                'disc1_loss' : disc1_loss,
-                'gen2_total_loss' : gen2_total_loss , 
-                'gen2_gan_loss' : gen2_gan_loss, 
-                'gen2_l1_loss' : gen2_l1_loss,
-                'disc2_loss' : disc2_loss, 
+def run_main(argv):
+  del argv
+  kwargs = {'epochs': 100, 'path': 'dataset/',
+  			'mode':'train',
             }
-
-    return outputs
-
-def fit(train_ds, epochs, test_ds):
-    for epoch in range(epochs):
-        start = time.time()
-
-        display.clear_output(wait=True)
-
-        for example_input, example_target in test_ds.take(1):
-            generate_images(generator1, generator2, example_input, example_target, epoch)
-        print(colored("Epoch: {}".format(epoch),'green',attrs=['reverse','blink']))
-
-        # Train
-        for n, (input_image, target) in train_ds.enumerate():
-            print('.', end='')
-            if (n+1) % 100 == 0:
-                print()
-            outputs = train_step(input_image, target, epoch)
-        print()
-        print('='*50)
-        print(colored('[!] gen1_total_loss :: {}'.format(outputs['gen1_total_loss']),'green'))
-        print(colored('[!] gen1_gan_loss :: {}'.format(outputs['gen1_gan_loss']),'green'))
-        print(colored('[!] gen1_l1_loss :: {}'.format(outputs['gen1_l1_loss']),'green'))
-        print(colored('[!] disc1_loss :: {}'.format(outputs['disc1_loss']),'green'))
-
-        print(colored('[!] gen2_total_loss :: {}'.format(outputs['gen2_total_loss']),'yellow'))
-        print(colored('[!] gen2_gan_loss :: {}'.format(outputs['gen2_gan_loss']),'yellow'))
-        print(colored('[!] gen2_l1_loss :: {}'.format(outputs['gen2_l1_loss']),'yellow'))
-        print(colored('[!] disc2_loss :: {}'.format(outputs['disc2_loss']),'yellow'))
-        print('='*50)
-
-        # saving (checkpoint) the model every 20 epochs
-        if (epoch + 1) % 5 == 0:
-            checkpoint1.save(file_prefix = checkpoint_prefix1)
-            checkpoint2.save(file_prefix = checkpoint_prefix2)
-
-        print ('Time taken for epoch {} is {} sec\n'.format(epoch + 1,
-                                                time.time()-start))
-    checkpoint1.save(file_prefix = checkpoint_prefix1)
-    checkpoint2.save(file_prefix = checkpoint_prefix2)
-
-# ## Training GAN Network
-
-#fit(train_dataset, epochs, test_dataset)
-
-# ## Restore the latest checkpoint and test
-
-checkpoint1.restore(tf.train.latest_checkpoint(checkpoint_dir1))
-checkpoint2.restore(tf.train.latest_checkpoint(checkpoint_dir2))
-print(colored('Checkpoint Restored !!!!!','cyan'))
-print(colored('='*50,'cyan'))
+  main(**kwargs)
 
 
-# ## Generate images with test dataset
+def main(epochs, path,mode ):
 
-# Run the trained model on a few examples from the test dataset
-try:
-    os.mkdir(experiment+'Test_Data/')
-except:
-    pass
-num=1
-for inp, tar in test_dataset.take(15):
-    generate_images(generator1, generator2, inp, tar,num, folder=experiment, mode='test')
-    num+=1
+	gan_object = GAN(epochs,path,mode)
+	print ('Training ...')
+	if mode=='train':
+		############# train dataset #################
+		train_dataset = tf.data.Dataset.list_files(path+'train/*.jpg')
+		train_dataset = train_dataset.map(load_image_train,
+		                                  num_parallel_calls=tf.data.experimental.AUTOTUNE)
+		train_dataset = train_dataset.shuffle(1)
+		train_dataset = train_dataset.batch(1)
+		############# test dataset ##################
+		test_dataset = tf.data.Dataset.list_files(path+'test/*.jpg')
+		test_dataset = test_dataset.map(load_image_test)
+		test_dataset = test_dataset.batch(1)
+		print('Training !!!!!')
+		gan_object.fit(train_dataset,epochs, test_dataset)
+
+	elif mode=='test':
+		test_dataset = tf.data.Dataset.list_files(PATH+'test/*.jpg')
+		test_dataset = test_dataset.map(load_image_test)
+		test_dataset = test_dataset.batch(BATCH_SIZE)
 
 
-# ## Save Generator Model
 
-generator1.save(experiment + 'generator1_model')
-generator2.save(experiment + 'generator2_model')
-
+if __name__ == '__main__':
+  app.run(run_main)
