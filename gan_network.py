@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Dr. S Murala
-#Following code work for scattering romoval.
-#Project Title : Scattering removal and Image Restoration in Mobile Application.
-#Following code is modified and customized by Omkar Thawakar.
+# 
+# Following code work for image to image translation with two generator GAN.
+# Baseline Code is designed by Tensorflow and it is customised by Omkar Thawakar
+# as a part of research project.
+
 # ## Import TensorFlow and other libraries
 
 from __future__ import absolute_import, division, print_function, unicode_literals
