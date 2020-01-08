@@ -28,17 +28,8 @@ import datetime
 import numpy as np
 from termcolor import colored, cprint
 
-experiment = 'Experiment/'
-PATH = 'dataset/'
-LAMBDA = 100
-epochs = 100
-loop = 7
 nf=8
-
-restore_checkpoint = None
-
-BUFFER_SIZE = 1
-BATCH_SIZE = 1
+LAMBDA = 100
 IMG_WIDTH = 256
 IMG_HEIGHT = 256
 
@@ -592,12 +583,15 @@ class GAN(object):
 
 def run_main(argv):
   del argv
-  kwargs = {'epochs': 100, 'path': 'dataset/',
-  			'mode':'test', 'output_path':'Exp_1',
+  kwargs = {'epochs': 100, 
+			'path': 'dataset/',
+  			'mode':'train', 
+  			'output_path':'Exp_1',
+  			'batch_size':1,
             }
   main(**kwargs)
 
-def main(epochs, path,mode,output_path):
+def main(epochs, path,mode,output_path,batch_size):
 
 	gan = GAN(epochs,path,mode,output_path)
 	if mode=='train':
@@ -606,20 +600,19 @@ def main(epochs, path,mode,output_path):
 		train_dataset = train_dataset.map(load_image_train,
 		                                  num_parallel_calls=tf.data.experimental.AUTOTUNE)
 		train_dataset = train_dataset.shuffle(1)
-		train_dataset = train_dataset.batch(1)
+		train_dataset = train_dataset.batch(batch_size)
 		############# test dataset ##################
 		test_dataset = tf.data.Dataset.list_files(path+'test/*.jpg')
 		test_dataset = test_dataset.map(load_image_test)
-		test_dataset = test_dataset.batch(1)
+		test_dataset = test_dataset.batch(batch_size)
 		print('Training !!!!!')
 		gan.fit(train_dataset,epochs, test_dataset)
 
 	elif mode=='test':
-		test_dataset = tf.data.Dataset.list_files(PATH+'test/*.jpg')
+		test_dataset = tf.data.Dataset.list_files(path+'test/*.jpg')
 		test_dataset = test_dataset.map(load_image_test)
-		test_dataset = test_dataset.batch(BATCH_SIZE)
-		chpt1_path = 'Exp_1/training_checkpoints/gen1'
-		chpt2_path = 'Exp_1/training_checkpoints/gen2'
+		test_dataset = test_dataset.batch(batch_size)
+		
 		gan.test(test_dataset) 
 
 if __name__ == '__main__':
