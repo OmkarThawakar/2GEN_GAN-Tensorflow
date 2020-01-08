@@ -1,12 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# 
 # Following code work for image to image translation with two generator GAN.
 # Baseline Code is designed by Tensorflow and it is customised by Omkar Thawakar
 # as a part of research project.
-
-# ## Import TensorFlow and other libraries
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
@@ -411,10 +408,13 @@ class GAN(object):
 	epochs: Number of epochs.
 	path: path to folder containing images (training and testing)..
 	mode: (train, test).
+	output_path : output path for saving model
 	"""
-	def __init__(self, epochs,path,mode):
+	def __init__(self, epochs,path,mode,output_path):
 		self.epochs = epochs
-		self.path = 'dataset'
+		self.path = path
+		self.output_path = output_path
+		os.path.join(self.output_path)
 		self.lambda_value = 100
 		self.gen1 = Generator_1()
 		self.generator1 = self.gen1.generator
@@ -438,7 +438,7 @@ class GAN(object):
 		self.generator2_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
 		self.discriminator2_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
 
-		self.checkpoint_dir1 = self.path + './training_checkpoints/' + 'gen1'
+		self.checkpoint_dir1 = self.output_path + './training_checkpoints/' + 'gen1'
 		self.checkpoint_prefix1 = os.path.join(self.checkpoint_dir1, "ckpt")
 		self.checkpoint1 = tf.train.Checkpoint(generator1_optimizer=self.generator1_optimizer,
 		                                 discriminator1_optimizer=self.discriminator1_optimizer,
@@ -446,37 +446,37 @@ class GAN(object):
 		                                 discriminator1=self.discriminator1,
 		                                 )
 
-		self.checkpoint_dir2 = self.path + './training_checkpoints' + 'gen2'
+		self.checkpoint_dir2 = self.output_path + './training_checkpoints/' + 'gen2'
 		self.checkpoint_prefix2 = os.path.join(self.checkpoint_dir2, "ckpt")
 		self.checkpoint2 = tf.train.Checkpoint(generator2_optimizer=self.generator2_optimizer,
 		                                 discriminator2_optimizer=self.discriminator2_optimizer,
 		                                 generator2=self.generator2,
 		                                 discriminator2=self.discriminator2)
 
-		log_dir = self.path + "logs/"
+		log_dir = self.output_path + "/logs/"
 		self.summary_writer = tf.summary.create_file_writer(log_dir + "fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
 
-	def generate_images(self, test_input, tar, number, folder = experiment, mode='train'):
+	def generate_images(self, test_input, tar, number, mode='train'):
 		if mode == 'train':
 		    gen1_prediction = self.generator1(test_input, training=True)
 		    gen2_prediction = self.generator2(gen1_prediction, training=True)
 		    display_list = [test_input[0], gen1_prediction[0], gen2_prediction[0], tar[0]]
 		    image = np.hstack([img for img in display_list])
 		    try :
-		        os.mkdir(folder+'{}'.format(mode))
+		        os.mkdir(self.output_path+'/{}/'.format(mode))
 		    except:
 		        pass
-		    plt.imsave(folder+'{}/{}_.png'.format(mode,number), np.array((image * 0.5 + 0.5)*255, dtype='uint8'))
+		    plt.imsave(self.output_path+'/{}/{}_.png'.format(mode,number), np.array((image * 0.5 + 0.5)*255, dtype='uint8'))
 		elif mode == 'test' :
 		    gen1_prediction = self.generator1(test_input, training=True)
 		    gen2_prediction = self.generator2(gen1_prediction, training=True)
 		    display_list = [test_input[0], gen1_prediction[0], gen2_prediction[0], tar[0]]
 		    image = np.hstack([img for img in display_list])
 		    try :
-		        os.mkdir(folder+'{}'.format(mode))
+		        os.mkdir(self.output_path+'/{}'.format(mode))
 		    except:
 		        pass
-		    plt.imsave(folder+'{}/{}_.png'.format(mode,umber), np.array((image * 0.5 + 0.5)*255, dtype='uint8'))
+		    plt.imsave(self.output_path+'/{}/{}_.png'.format(mode,number), np.array((image * 0.5 + 0.5)*255, dtype='uint8'))
 		else:
 		    print('Enter valid mode eighter [!]train or [!]test')
 		    exit(0)
@@ -550,7 +550,6 @@ class GAN(object):
 	        for example_input, example_target in test_ds.take(1):
 	            self.generate_images(example_input, example_target, epoch)
 	        print(colored("Epoch: {}".format(epoch),'green',attrs=['reverse','blink']))
-
 	        # Train
 	        for n, (input_image, target) in train_ds.enumerate():
 	            print('.', end='')
@@ -572,27 +571,35 @@ class GAN(object):
 
 	        # saving (checkpoint) the model every 20 epochs
 	        if (epoch + 1) % 5 == 0:
-	            checkpoint1.save(file_prefix = checkpoint_prefix1)
-	            checkpoint2.save(file_prefix = checkpoint_prefix2)
+	            self.checkpoint1.save(file_prefix = self.checkpoint_prefix1)
+	            self.checkpoint2.save(file_prefix = self.checkpoint_prefix2)
 
 	        print ('Time taken for epoch {} is {} sec\n'.format(epoch + 1,
 	                                                time.time()-start))
-	    checkpoint1.save(file_prefix = checkpoint_prefix1)
-	    checkpoint2.save(file_prefix = checkpoint_prefix2)
+	    self.checkpoint1.save(file_prefix = self.checkpoint_prefix1)
+	    self.checkpoint2.save(file_prefix = self.checkpoint_prefix2)
+
+	def test(self, dataset):
+		self.checkpoint1.restore(tf.train.latest_checkpoint(self.checkpoint_prefix1)) 
+		self.checkpoint2.restore(tf.train.latest_checkpoint(self.checkpoint_prefix2)) 
+		text = colored('Checkpoint restored !!!','magenta')
+		print(text)
+		print(colored('='*50,'magenta'))
+		for n, (example_input, example_target) in dataset.enumerate():
+		    self.generate_images(example_input, example_target, n, mode='test')
+		print(colored("Model Tested Successfully !!!!! ",'green',attrs=['reverse','blink'])) 
 
 
 def run_main(argv):
   del argv
   kwargs = {'epochs': 100, 'path': 'dataset/',
-  			'mode':'train',
+  			'mode':'test', 'output_path':'Exp_1',
             }
   main(**kwargs)
 
+def main(epochs, path,mode,output_path):
 
-def main(epochs, path,mode ):
-
-	gan_object = GAN(epochs,path,mode)
-	print ('Training ...')
+	gan = GAN(epochs,path,mode,output_path)
 	if mode=='train':
 		############# train dataset #################
 		train_dataset = tf.data.Dataset.list_files(path+'train/*.jpg')
@@ -605,14 +612,15 @@ def main(epochs, path,mode ):
 		test_dataset = test_dataset.map(load_image_test)
 		test_dataset = test_dataset.batch(1)
 		print('Training !!!!!')
-		gan_object.fit(train_dataset,epochs, test_dataset)
+		gan.fit(train_dataset,epochs, test_dataset)
 
 	elif mode=='test':
 		test_dataset = tf.data.Dataset.list_files(PATH+'test/*.jpg')
 		test_dataset = test_dataset.map(load_image_test)
 		test_dataset = test_dataset.batch(BATCH_SIZE)
-
-
+		chpt1_path = 'Exp_1/training_checkpoints/gen1'
+		chpt2_path = 'Exp_1/training_checkpoints/gen2'
+		gan.test(test_dataset) 
 
 if __name__ == '__main__':
   app.run(run_main)
