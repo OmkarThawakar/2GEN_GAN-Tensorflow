@@ -409,9 +409,8 @@ class GAN(object):
 	"""GAN class.
 	Args:
 	epochs: Number of epochs.
-	enable_function: If true, train step is decorated with tf.function.
-	buffer_size: Shuffle buffer size..
-	batch_size: Batch size.
+	path: path to folder containing images (training and testing)..
+	mode: (train, test).
 	"""
 	def __init__(self, epochs,path,mode):
 		self.epochs = epochs
